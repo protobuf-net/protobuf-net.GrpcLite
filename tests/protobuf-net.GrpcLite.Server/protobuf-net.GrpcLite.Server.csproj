@@ -12,8 +12,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\protobuf-net.Grpc.AspNetCore\protobuf-net.Grpc.AspNetCore.csproj" Condition="$(TargetFramework)!='net472'"/>
-    <ProjectReference Include="..\..\src\protobuf-net.Grpc.Native\protobuf-net.Grpc.Native.csproj" Condition="$(TargetFramework)=='net472'"/>
+    <PackageReference Include="protobuf-net.Grpc.AspNetCore" Version="$(PBGRPCLibVersion)" Condition="$(TargetFramework)!='net472'"/>
+    <PackageReference Include="protobuf-net.Grpc.Native" Version="$(PBGRPCLibVersion)" Condition="$(TargetFramework)=='net472'"/>
     <ProjectReference Include="..\protobuf-net.GrpcLite.Test\protobuf-net.GrpcLite.Test.csproj" />
   </ItemGroup>
 
