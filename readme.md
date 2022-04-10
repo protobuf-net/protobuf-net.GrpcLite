@@ -1,66 +1,96 @@
-# <img src="https://protogen.marcgravell.com/images/protobuf-net.svg" alt="protobuf-net logo" width="45" height="45"> protobuf-net.Grpc
+# What is protobuf-net.GrpcLite?
 
-[![Build status](https://ci.appveyor.com/api/projects/status/en9i5mp471ci6ip3/branch/main?svg=true)](https://ci.appveyor.com/project/StackExchange/protobuf-net-grpc/branch/main)
+It is a drop in protocol replacement for gRPC; the .NET gRPC API has no hard bindings to either the marshaller or the underlying transport; protobuf-net.Grpc offered ways to change the marshaller (for example,
+allowing you to use protobuf-net) - and now protobuf-net.GrpcLite allows you to change the transport - from HTTP/2 to a custom transport *inspired* by HTTP/2, but simpler and with lower overheads. It is also
+fully managed, unlike HTTP/2 which often required unmanaged library or OS support.
 
-`protobuf-net.Grpc` adds code-first support for services over gRPC using either the native `Grpc.Core` API, or the fully-managed `Grpc.Net.Client` / `Grpc.AspNetCore.Server` API.
+The transport *is not compatible* with regular HTTP/2 gRPC, but: all of your existing gRPC code should continue to function, as long as you have a client and server that can talk the same dialect.
 
-It should work on all .NET languages that can generate something *even remotely like* a regular .NET type model.
+## How do I use it?
 
-- [Getting Started](https://protobuf-net.github.io/protobuf-net.Grpc/gettingstarted)
-- [All Documentation](https://protobuf-net.github.io/protobuf-net.Grpc/)
-- [Build/usage available via `protobuf-net.BuildTools`](https://protobuf-net.github.io/protobuf-net/build_tools)
-
-Usage is as simple as declaring an interface for your service-contract:
+At the client, instead of using `var channel = new Channel(...);` (unmanaged HTTP/2) or `var channel = GrpcChannel.ForAddress(...);` (managed HTTP/2), you would use something like:
 
 ``` c#
-[ServiceContract]
-public interface IMyAmazingService {
-    ValueTask<SearchResponse> SearchAsync(SearchRequest request);
-    // ...
-}
+using var channel = await ConnectionFactory.ConnectSocket(endPoint).AsFrames().CreateChannelAsync();
 ```
 
-then either implementing that interface for a server:
+The rest of your client code *shouldn't change at all*. This is just one example; other terminators are possible - for example, anything that can provide a `Stream` should work, including support
+for things like TLS, compression, named pipes, etc.
+
+At the server, the code is currently a bit closer to the unmanaged server implementation (the server does not integrate deeply into Kestrel, although it works fine inside a Kestrel process); service-binding
+is via the `.ServiceBinder`:
 
 ``` c#
-public class MyServer : IMyAmazingService {
-    // ...
-}
+var server = new LiteServer();
+server.ServiceBinder.Bind(new MyService()); // contract-first example, generated via protoc
+
+// alternative if not also using protobuf-net.Grpc, which provides the Bind API
+// YourService.BindService(server.ServiceBinder, new MyService());
+
+_ = server.ListenAsync(ConnectionFactory.ListenSocket(endpoint).AsStream().AsFrames());
+// ... note: leave your server running here, until you're ready to exit!
+server.Stop();
 ```
 
-or asking the system for a client:
+The `ListenAsync` call will listen for multiple connections; a single server can listen to many connections on many different listeneres at once - for example, you could
+listen to multiple TCP ports, with/without TLS. Your `MyService` instance will be activated just like it would have been with the unmanaged server host.
+
+## How do I use TLS?
+
+TLS is provided via `SslStream`, and works with or without client certificates; the `WithTls()` connector optionally accepts callbacks for providing user certificates (client), or
+validating remote certificates (client or server); the `AuthenticateAsServer()` connector accepts a server certificate, and optionally demands client certificates; for example:
 
 ``` c#
-var client = http.CreateGrpcService<IMyAmazingService>();
-var results = await client.SearchAsync(request);
+// TCP server; no TLS
+_ = server.ListenAsync(ConnectionFactory.ListenSocket(endpoint).AsStream().AsFrames());
+// TCP server; TLS, no client certs
+_ = server.ListenAsync(ConnectionFactory.ListenSocket(endpoint).AsStream().WithTls().AuthenticateAsServer(serverCert).AsFrames());
+// TCP server; TLS, client certs (validated via userCheck)
+_ = server.ListenAsync(ConnectionFactory.ListenSocket(endpoint).AsStream().WithTls(userCheck).AuthenticateAsServer(serverCert, clientCertificateRequired: true).AsFrames());
+
+
+``` c#
+// TCP client; no TLS
+using var channel = await ConnectionFactory.ConnectSocket(endPoint).AsFrames().CreateChannelAsync();
+// TCP client; TLS, using default server validation and certificate selection
+using var channel = await ConnectionFactory.ConnectSocket(endpoint).AsStream().WithTls().AuthenticateAsClient("mytestserver").AsFrames().CreateChannelAsync();
+// TCP client; TLS, using custom server validation and certificate selection
+using var channel = await ConnectionFactory.ConnectSocket(endpoint).AsStream().WithTls(serverCheck, certSelector).AuthenticateAsClient("mytestserver").AsFrames().CreateChannelAsync();
 ```
 
-This would be equivalent to the service in .proto:
+## How do I use code-first?
 
-``` proto
-service MyAmazingService {
-    rpc Search (SearchRequest) returns (SearchResponse) {}
-	// ...
-}
+At the client, code-first works exactly as it always has; just use the `.CreateClient<TService>()` method on the channel.
+
+As the server, binding code-first serves to the custom server is uses the `.Binder` API:
+
+``` c#
+server.ServiceBinder.AddCodeFirst(...);
 ```
 
-Obviously you need to tell it the uri etc - see [Getting Started](https://protobuf-net.github.io/protobuf-net.Grpc/gettingstarted). Usually the configuration is convention-based, but
-if you prefer: there are [various configuration options](https://protobuf-net.github.io/protobuf-net.Grpc/configuration).
+## How do I use interceptors?
 
-## Getting hold of it
+Client-side interceptors work exactly like they do in all scenarios.
 
-Everything is available as pre-built packages on nuget; in particular, you probably want one of:
+To register a server-side interceptor, the `Intercept()` API is used alongside the `.ServiceBinder`:
 
-- [`protobuf-net.Grpc.AspNetCore`](https://www.nuget.org/packages/protobuf-net.Grpc.AspNetCore) for servers using ASP.NET Core 3.1
-- [`protobuf-net.Grpc.Native`](https://www.nuget.org/packages/protobuf-net.Grpc.Native) for clients or servers using the native/unmanaged API
-- [`protobuf-net.Grpc`](https://www.nuget.org/packages/protobuf-net.Grpc) and [`Grpc.Net.Client`](https://www.nuget.org/packages/Grpc.Net.Client/) for clients using `HttpClient` on .NET Core 3.1
+``` c#
+server.ServiceBinder.Intercept(...).Bind(new MyService()); // contract-first example, generated via protoc
+server.ServiceBinder.Intercept(...).AddCodeFirst(...); // code-first
 
-[Usage examples are available in C#, VB and F#](https://github.com/protobuf-net/protobuf-net.Grpc/tree/main/examples/pb-net-grpc).
+// alternative for contract-first if not also using protobuf-net.Grpc, which provides the Bind API
+// YourService.BindService(server.ServiceBinder.Intercept(...), new MyService());
+```
 
-## Anything else?
+## Other notes
 
-`protobuf-net.Grpc` is created and maintained by [Marc Gravell](https://github.com/mgravell) ([@marcgravell](https://twitter.com/marcgravell)), the author of `protobuf-net`.
+It currently targets .NET Framework 4.7.2 up to .NET 6.0, using newer features when available. It is still very experimental - but most core things should work; feedback is welcome.
 
-It makes use of tools from [grpc](https://github.com/grpc/), but is not official associated with, affiliated with, or endorsed by that project.
+Known gaps:
 
-I look forward to your feedback, and if this could save you a ton of time, you're always welcome to [![Buy me a coffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://www.buymeacoffee.com/marcgravell)
+- gRPC auth (although transport auth works fine)
+- per-stream service activation (rather than singleton)
+- testing needs more coverage
+- per-stream backoff negotiation; designed, not yet implemented
+- for some reason the server implementation isn't working 100% with SAEA currently - hence `.AsStream().AsFrames()` instead of just `.AsFrames()`
+- open question around interceptor order
