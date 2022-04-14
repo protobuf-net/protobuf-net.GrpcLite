@@ -41,7 +41,8 @@ public class BasicTests
     [Fact]
     public void CanCreateInvoker()
     {
-        using var channel = new LiteChannel(new StreamFrameConnection(Stream.Null), Me());
+        using var duplex = DuplexStream.Create(new MemoryStream(), new MemoryStream());
+        using var channel = new LiteChannel(new StreamFrameConnection(duplex), Me());
         var invoker = channel.CreateCallInvoker();
     }
 

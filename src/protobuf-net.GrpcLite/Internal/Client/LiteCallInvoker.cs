@@ -142,8 +142,15 @@ internal sealed class LiteCallInvoker : CallInvoker, IConnection, IWorker
 
     public void Execute()
     {
-        _logger.SetSource(LogKind.Client, "invoker");
-        _logger.Debug(_target, static (state, _) => $"Starting call-invoker (client): {state}...");
-        _ = this.RunAsync(_logger, _clientShutdown.Token);
+        try
+        {
+            _logger.SetSource(LogKind.Client, "invoker");
+            _logger.Debug(_target, static (state, _) => $"Starting call-invoker (client): {state}...");
+            _ = this.RunAsync(_logger, _clientShutdown.Token);
+        }
+        catch (Exception ex)
+        {
+            _logger.Critical(ex);
+        }
     }
 }

@@ -48,6 +48,10 @@ internal sealed class StreamFrameConnection : IFrameConnection
                     bytesRead = await _duplex.ReadAsync(builder.GetBuffer(), cancellationToken);
                     if (bytesRead <= 0) break; // natural EOF
                 }
+                catch (OperationCanceledException oce) when (oce.CancellationToken == cancellationToken)
+                {
+                    break; // cancellation
+                }
                 catch (IOException ex)
                 {   // treat as EOF (we'll check for incomplete reads below)
                     _logger.Debug(ex.Message);

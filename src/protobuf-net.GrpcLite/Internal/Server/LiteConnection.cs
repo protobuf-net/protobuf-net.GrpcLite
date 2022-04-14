@@ -61,9 +61,16 @@ internal sealed class LiteConnection : IWorker, IConnection
 
     public void Execute()
     {
-        _logger.SetSource(LogKind.Server, "connection " + Id);
-        _logger.Debug("starting connection executor");
-        Complete ??= this.RunAsync(_logger, _server.ServerShutdown);
+        try
+        {
+            _logger.SetSource(LogKind.Server, "connection " + Id);
+            _logger.Debug("starting connection executor");
+            Complete ??= this.RunAsync(_logger, _server.ServerShutdown);
+        }
+        catch (Exception ex)
+        {
+            _logger.Critical(ex);
+        }
     }
     internal Task ExecuteDirect()
     {

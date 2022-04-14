@@ -46,6 +46,10 @@ internal sealed class NullConnection : IFrameConnection
             while (await _input.WaitToReadAsync(cancellationToken));
             _output.TryComplete(); // signal the EOF scenario
         }
+        catch (OperationCanceledException oce) when (oce.CancellationToken == cancellationToken)
+        {
+            _output.TryComplete(); // successfully cancelled
+        }
         catch (Exception ex)
         {
             _output.TryComplete(ex); // try to signal the problem - we're broken

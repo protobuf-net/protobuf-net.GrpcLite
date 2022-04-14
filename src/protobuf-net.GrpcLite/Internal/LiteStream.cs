@@ -571,9 +571,9 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
     }
     public void Execute()
     {
-        Logger.SetSource(IsClient ? LogKind.Client : LogKind.Server, "executor");
         try
         {
+            Logger.SetSource(IsClient ? LogKind.Client : LogKind.Server, "executor");
             WorkerState previousState;
             lock (SyncLock)
             {

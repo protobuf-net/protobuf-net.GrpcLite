@@ -67,6 +67,11 @@ internal sealed class SocketFrameConnection : IFrameConnection
                     bytesRead = readArgs.BytesTransferred;
                     if (bytesRead <= 0) break; // natural EOF
                 }
+                catch (SocketException soex) when (soex.ErrorCode == (int)SocketError.OperationAborted)
+                {
+                    // treat as EOF (we'll check for incomplete reads below)
+                    break;
+                }
                 catch (IOException ex)
                 {   // treat as EOF (we'll check for incomplete reads below)
                     _logger.Debug(ex.Message);

@@ -47,7 +47,11 @@ internal sealed class PipeFrameConnection : IFrameConnection
                     _logger.Debug(builder.RequestBytes, static (state, _) => $"pipe reader requesting {state} bytes...");
                     result = await _pipe.Input.ReadAtLeastAsync(builder.RequestBytes, cancellationToken);
 
-                    if (result.IsCanceled) ThrowCancelled(nameof(PipeReader.ReadAtLeastAsync), cancellationToken);
+                    if (result.IsCanceled) break;
+                }
+                catch (OperationCanceledException oce) when (oce.CancellationToken == cancellationToken)
+                {
+                    break; // cancellation
                 }
                 catch (Exception ex)
                 {
@@ -68,6 +72,11 @@ internal sealed class PipeFrameConnection : IFrameConnection
                     if (builder.InProgress) ThrowEOF();
                     break; // exit main while
                 }
+            }
+
+            if (!cancellationToken.IsCancellationRequested)
+            {
+                if (builder.InProgress) ThrowEOF(); // incomplete frame detected
             }
         }
         finally
