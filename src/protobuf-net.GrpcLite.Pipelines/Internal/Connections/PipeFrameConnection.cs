@@ -1,14 +1,13 @@
 ﻿using Microsoft.Extensions.Logging;
 using ProtoBuf.Grpc.Lite.Connections;
-using System.IO.Pipelines;
+using System;
 using System.Buffers;
 using System.Diagnostics;
+using System.IO;
+using System.IO.Pipelines;
+using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
-using System;
-using System.Collections.Generic;
-using System.Threading;
-using System.IO;
 
 namespace ProtoBuf.Grpc.Lite.Internal.Connections;
 
@@ -33,23 +32,33 @@ internal sealed class PipeFrameConnection : IFrameConnection
         Close(null);
     }
 
-    async Task IFrameConnection.ReadAllAsync(Func<Frame, ValueTask> action, CancellationToken cancellationToken)
+    OverlappedMicroChannel<Frame>? _readChannel;
+    ChannelReader<Frame> IFrameConnection.ReadAsync(CancellationToken cancellationToken)
+    {
+        if (OverlappedMicroChannel<Frame>.Create(ref _readChannel, cancellationToken))
+        {
+            _ = Task.Run(PushToChannel);
+        }
+        return _readChannel;
+    }
+
+    private async Task PushToChannel()
     {
         _logger.Debug(this, static (state, _) => $"pipe reader starting");
         var builder = Frame.CreateBuilder();
         try
         {
-            while (!cancellationToken.IsCancellationRequested)
+            while (!_readChannel!.CancellationToken.IsCancellationRequested)
             {
                 ReadResult result;
                 try
                 {
                     _logger.Debug(builder.RequestBytes, static (state, _) => $"pipe reader requesting {state} bytes...");
-                    result = await _pipe.Input.ReadAtLeastAsync(builder.RequestBytes, cancellationToken);
+                    result = await _pipe.Input.ReadAtLeastAsync(builder.RequestBytes, _readChannel!.CancellationToken);
 
                     if (result.IsCanceled) break;
                 }
-                catch (OperationCanceledException oce) when (oce.CancellationToken == cancellationToken)
+                catch (OperationCanceledException oce) when (oce.CancellationToken == _readChannel!.CancellationToken)
                 {
                     break; // cancellation
                 }
@@ -63,7 +72,10 @@ internal sealed class PipeFrameConnection : IFrameConnection
                 _logger.Debug(buffer, static (state, _) => $"pipe reader provided {state.Length} bytes; parsing {state.ToHex()}");
                 while (builder.TryRead(ref buffer, out var frame))
                 {
-                    await action(frame);
+                    while (!_readChannel.TryWrite(frame))
+                    {
+                        await _readChannel.WriteToWriteAsync();
+                    }
                 }
                 _pipe.Input.AdvanceTo(buffer.Start, buffer.End);
                 Debug.Assert(buffer.IsEmpty, "we expect to consume the entire buffer"); // because we can't trust the pipe's allocator :(
@@ -74,10 +86,16 @@ internal sealed class PipeFrameConnection : IFrameConnection
                 }
             }
 
-            if (!cancellationToken.IsCancellationRequested)
+            if (!_readChannel!.CancellationToken.IsCancellationRequested)
             {
                 if (builder.InProgress) ThrowEOF(); // incomplete frame detected
             }
+            _readChannel!.TryComplete();
+        }
+        catch (Exception ex)
+        {
+            _readChannel?.TryComplete(ex);
+            _logger.Error(ex);
         }
         finally
         {

@@ -2,7 +2,6 @@
 using ProtoBuf.Grpc.Lite.Connections;
 using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
@@ -11,7 +10,6 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
-using System.Threading.Tasks.Sources;
 
 namespace ProtoBuf.Grpc.Lite.Internal.Connections;
 
@@ -34,21 +32,32 @@ internal sealed class StreamFrameConnection : IFrameConnection
     }
 
     public void Dispose() => _duplex.SafeDispose();
-    async Task IFrameConnection.ReadAllAsync(Func<Frame, ValueTask> action, CancellationToken cancellationToken)
+
+    OverlappedMicroChannel<Frame>? _readChannel;
+    ChannelReader<Frame> IFrameConnection.ReadAsync(CancellationToken cancellationToken)
+    {
+        if (OverlappedMicroChannel<Frame>.Create(ref _readChannel, cancellationToken))
+        {
+            _ = Task.Run(PushToChannel);
+        }
+        return _readChannel;
+    }
+
+    async Task PushToChannel()
     {
         var builder = Frame.CreateBuilder(logger: _logger);
         try
         {
             int bytesRead;
-            while (!cancellationToken.IsCancellationRequested)
+            while (!_readChannel!.CancellationToken.IsCancellationRequested)
             {
                 _logger.Debug(builder.GetBuffer(), static (state, _) => $"reading up-to {state.Length} bytes from stream...");
                 try
                 {
-                    bytesRead = await _duplex.ReadAsync(builder.GetBuffer(), cancellationToken);
+                    bytesRead = await _duplex.ReadAsync(builder.GetBuffer(), _readChannel!.CancellationToken);
                     if (bytesRead <= 0) break; // natural EOF
                 }
-                catch (OperationCanceledException oce) when (oce.CancellationToken == cancellationToken)
+                catch (OperationCanceledException oce) when (oce.CancellationToken == _readChannel!.CancellationToken)
                 {
                     break; // cancellation
                 }
@@ -61,14 +70,23 @@ internal sealed class StreamFrameConnection : IFrameConnection
                 while (builder.TryRead(ref bytesRead, out var frame))
                 {
                     _logger.Debug((frame, builder, bytesRead), static (state, _) => $"parsed {state.frame}; {state.bytesRead} remaining");
-                    await action(frame);
+                    while (!_readChannel.TryWrite(frame))
+                    {
+                        await _readChannel.WriteToWriteAsync();
+                    }
                 }
             }
-            if (!cancellationToken.IsCancellationRequested)
+            if (!_readChannel!.CancellationToken.IsCancellationRequested)
             {
                 if (builder.InProgress) ThrowEOF(); // incomplete frame detected
                 static void ThrowEOF() => throw new EndOfStreamException();
             }
+            _readChannel!.TryComplete();
+        }
+        catch (Exception ex)
+        {
+            _readChannel?.TryComplete(ex);
+            _logger.Error(ex);
         }
         finally
         {

@@ -16,7 +16,7 @@ internal interface IConnection
 {
     bool IsClient { get; }
     ChannelWriter<(Frame Frame, FrameWriteFlags Flags)> Output { get; }
-    Task ReadAllAsync(Func<Frame, ValueTask> action, CancellationToken cancellationToken = default);
+    ChannelReader<Frame> ReadAsync(CancellationToken cancellationToken = default);
     bool TryCreateStream(in Frame initialize, ReadOnlyMemory<char> route, [MaybeNullWhen(false)] out IStream stream);
 
     ConcurrentDictionary<ushort, IStream> Streams { get; }
@@ -39,131 +39,137 @@ internal static class ListenerEngine
         try
         {
             logger.Debug(connection, static (state, _) => $"connection {state} ({(state.IsClient ? "client" : "server")}) processing streams...");
-            await connection.ReadAllAsync(async frame => {
-                var header = frame.GetHeader();
-                logger.Debug(frame, static (state, _) => $"received frame {state}");
-                bool release = true;
-                switch (header.Kind)
+            var reader = connection.ReadAsync(cancellationToken);
+
+            do
+            {
+                while (reader.TryRead(out frame))
                 {
-                    case FrameKind.None:
-                        logger.Debug(frame, static (state, _) => $"invalid frame {state} received");
-                        break;
-                    case FrameKind.ConnectionClose:
-                    case FrameKind.ConnectionPing:
-                        if (header.IsClientStream != connection.IsClient)
-                        {
-                            // the other end is initiating; acknowledge with an empty but similar frame
-                            await WriteAsync(connection, header.Kind, header.StreamId, header.SequenceId, cancellationToken);
-                        }
-                        // shutdown if requested
-                        if (header.Kind == FrameKind.ConnectionClose)
-                        {
-                            connection.Output.Complete();
-                        }
-                        break;
-                    case FrameKind.StreamHeader when header.IsClientStream != connection.IsClient: // a header with the "other" stream marker means
-                        if (connection.Streams.ContainsKey(header.StreamId))
-                        {
-                            logger.Error(header.StreamId, static (state, _) => $"duplicate id! {state}");
-                            await WriteAsync(connection, FrameKind.StreamCancel, header.StreamId, 0, cancellationToken);
-                        }
-                        else
-                        {
-                            ArraySegment<char> route = MetadataEncoder.GetRouteBuffer(frame.GetPayload());
-                            PayloadFrameSerializationContext? ctx = null;
-                            try
+                    var header = frame.GetHeader();
+                    logger.Debug(frame, static (state, _) => $"received frame {state}");
+                    bool release = true;
+                    switch (header.Kind)
+                    {
+                        case FrameKind.None:
+                            logger.Debug(frame, static (state, _) => $"invalid frame {state} received");
+                            break;
+                        case FrameKind.ConnectionClose:
+                        case FrameKind.ConnectionPing:
+                            if (header.IsClientStream != connection.IsClient)
                             {
-                                if (connection.TryCreateStream(in frame, new ReadOnlyMemory<char>(route.Array, route.Offset, route.Count), out var newStream) && newStream is not null)
+                                // the other end is initiating; acknowledge with an empty but similar frame
+                                await WriteAsync(connection, header.Kind, header.StreamId, header.SequenceId, cancellationToken);
+                            }
+                            // shutdown if requested
+                            if (header.Kind == FrameKind.ConnectionClose)
+                            {
+                                connection.Output.Complete();
+                            }
+                            break;
+                        case FrameKind.StreamHeader when header.IsClientStream != connection.IsClient: // a header with the "other" stream marker means
+                            if (connection.Streams.ContainsKey(header.StreamId))
+                            {
+                                logger.Error(header.StreamId, static (state, _) => $"duplicate id! {state}");
+                                await WriteAsync(connection, FrameKind.StreamCancel, header.StreamId, 0, cancellationToken);
+                            }
+                            else
+                            {
+                                ArraySegment<char> route = MetadataEncoder.GetRouteBuffer(frame.GetPayload());
+                                PayloadFrameSerializationContext? ctx = null;
+                                try
                                 {
-                                    if (connection.Streams.TryAdd(header.StreamId, newStream))
+                                    if (connection.TryCreateStream(in frame, new ReadOnlyMemory<char>(route.Array, route.Offset, route.Count), out var newStream) && newStream is not null)
                                     {
-                                        if (newStream.TryAcceptFrame(frame))
+                                        if (connection.Streams.TryAdd(header.StreamId, newStream))
                                         {
-                                            logger.Debug(route, static (state, _) => $"method accepted: {state.CreateString()}");
-                                            release = false;
+                                            if (newStream.TryAcceptFrame(frame))
+                                            {
+                                                logger.Debug(route, static (state, _) => $"method accepted: {state.CreateString()}");
+                                                release = false;
+                                            }
+                                            else
+                                            {
+                                                logger.Debug(route, static (state, _) => $"method resolved, but initial frame rejected: {state.CreateString()}");
+                                                connection.Remove(header.StreamId);
+                                                ctx = PayloadFrameSerializationContext.Get(header.StreamId, connection.Pool, FrameKind.StreamTrailer);
+                                                MetadataEncoder.WriteStatus(ctx, StatusCode.Internal, "Initial frame rejected".AsSpan());
+                                                ctx.Complete();
+                                                await ctx.WritePayloadAsync(connection.Output, FrameWriteFlags.None, cancellationToken);
+                                            }
                                         }
                                         else
                                         {
-                                            logger.Debug(route, static (state, _) => $"method resolved, but initial frame rejected: {state.CreateString()}");
-                                            connection.Remove(header.StreamId);
+                                            logger.Error(header.StreamId, static (state, _) => $"duplicate id! {state}");
                                             ctx = PayloadFrameSerializationContext.Get(header.StreamId, connection.Pool, FrameKind.StreamTrailer);
-                                            MetadataEncoder.WriteStatus(ctx, StatusCode.Internal, "Initial frame rejected".AsSpan());
+                                            MetadataEncoder.WriteStatus(ctx, StatusCode.AlreadyExists, "Specified stream already exists".AsSpan());
                                             ctx.Complete();
                                             await ctx.WritePayloadAsync(connection.Output, FrameWriteFlags.None, cancellationToken);
                                         }
                                     }
                                     else
                                     {
-                                        logger.Error(header.StreamId, static (state, _) => $"duplicate id! {state}");
+                                        logger.Debug(route, static (state, _) => $"method not found: {state.CreateString()}");
                                         ctx = PayloadFrameSerializationContext.Get(header.StreamId, connection.Pool, FrameKind.StreamTrailer);
-                                        MetadataEncoder.WriteStatus(ctx, StatusCode.AlreadyExists, "Specified stream already exists".AsSpan());
+                                        MetadataEncoder.WriteStatus(ctx, StatusCode.NotFound, route.AsSpan());
                                         ctx.Complete();
                                         await ctx.WritePayloadAsync(connection.Output, FrameWriteFlags.None, cancellationToken);
                                     }
                                 }
-                                else
+                                finally
                                 {
-                                    logger.Debug(route, static (state, _) => $"method not found: {state.CreateString()}");
-                                    ctx = PayloadFrameSerializationContext.Get(header.StreamId, connection.Pool, FrameKind.StreamTrailer);
-                                    MetadataEncoder.WriteStatus(ctx, StatusCode.NotFound, route.AsSpan());
-                                    ctx.Complete();
-                                    await ctx.WritePayloadAsync(connection.Output, FrameWriteFlags.None, cancellationToken);
+                                    if (route.Array is not null)
+                                        ArrayPool<char>.Shared.Return(route.Array);
+                                    ctx?.Recycle();
                                 }
                             }
-                            finally
+                            break;
+                        default:
+                            if (connection.Streams.TryGetValue(header.StreamId, out var existingStream) && existingStream is not null)
                             {
-                                if (route.Array is not null)
-                                    ArrayPool<char>.Shared.Return(route.Array);
-                                ctx?.Recycle();
-                            }
-                        }
-                        break;
-                    default:
-                        if (connection.Streams.TryGetValue(header.StreamId, out var existingStream) && existingStream is not null)
-                        {
-                            if (!existingStream.IsActive)
-                            {
-                                // shouldn't still be here, but; fix that
-                                connection.Streams.TryRemove(header.StreamId, out _);
-                            }
-                            if (header.Kind == FrameKind.StreamCancel)
-                            {
-                                // kill it
-                                connection.Streams.TryRemove(header.StreamId, out _);
-                                existingStream.Cancel();
+                                if (!existingStream.IsActive)
+                                {
+                                    // shouldn't still be here, but; fix that
+                                    connection.Streams.TryRemove(header.StreamId, out _);
+                                }
+                                if (header.Kind == FrameKind.StreamCancel)
+                                {
+                                    // kill it
+                                    connection.Streams.TryRemove(header.StreamId, out _);
+                                    existingStream.Cancel();
+                                }
+                                else
+                                {
+                                    logger.Debug((stream: existingStream, frame: frame), static (state, _) => $"pushing {state.frame} to {state.stream.Method} ({state.stream.MethodType})");
+                                    if (existingStream.TryAcceptFrame(in frame))
+                                    {
+                                        release = false;
+                                    }
+                                    else
+                                    {
+                                        logger.Information(frame, static (state, _) => $"frame {state} rejected by stream");
+                                    }
+
+                                    if ((header.Kind == FrameKind.StreamTrailer && header.IsFinal))
+                                    {
+                                        logger.Debug(header, static (state, _) => $"removing stream {state}");
+                                        connection.Streams.TryRemove(header.StreamId, out _);
+                                    }
+                                }
                             }
                             else
                             {
-                                logger.Debug((stream: existingStream, frame: frame), static (state, _) => $"pushing {state.frame} to {state.stream.Method} ({state.stream.MethodType})");
-                                if (existingStream.TryAcceptFrame(in frame))
-                                {
-                                    release = false;
-                                }
-                                else
-                                {
-                                    logger.Information(frame, static (state, _) => $"frame {state} rejected by stream");
-                                }
-
-                                if ((header.Kind == FrameKind.StreamTrailer && header.IsFinal))
-                                {
-                                    logger.Debug(header, static (state, _) => $"removing stream {state}");
-                                    connection.Streams.TryRemove(header.StreamId, out _);
-                                }
+                                logger.Information(frame, static (state, _) => $"received frame for unknown stream {state}");
                             }
-                        }
-                        else
-                        {
-                            logger.Information(frame, static (state, _) => $"received frame for unknown stream {state}");
-                        }
-                        break;
+                            break;
+                    }
+                    if (release)
+                    {
+                        logger.Debug(frame.TotalLength, static (state, _) => $"releasing {state} bytes");
+                        frame.Release();
+                        frame = default;
+                    }
                 }
-                if (release)
-                {
-                    logger.Debug(frame.TotalLength, static (state, _) => $"releasing {state} bytes");
-                    frame.Release();
-                    frame = default;
-                }
-            }, cancellationToken);
+            } while (await reader.WaitToReadAsync(cancellationToken));
 
             logger.Debug(connection, static (state, _) => $"connection {state} ({(state.IsClient ? "client" : "server")}) exiting cleanly");
             connection.Output.Complete(null);

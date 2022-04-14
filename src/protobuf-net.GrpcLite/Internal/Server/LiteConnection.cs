@@ -41,8 +41,7 @@ internal sealed class LiteConnection : IWorker, IConnection
 
     bool IConnection.IsClient => false;
 
-    Task IConnection.ReadAllAsync(Func<Frame, ValueTask> action, CancellationToken cancellationToken)
-        => _connection.ReadAllAsync(action, cancellationToken);
+    ChannelReader<Frame> IConnection.ReadAsync(CancellationToken cancellationToken) => _connection.ReadAsync(cancellationToken);
 
     ConcurrentDictionary<ushort, IStream> IConnection.Streams => _streams;
 

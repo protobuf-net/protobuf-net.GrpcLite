@@ -13,7 +13,7 @@ namespace ProtoBuf.Grpc.Lite.Connections;
 /// <summary>
 /// A <see cref="MemoryPool{T}"/> implementation that incorporates reference-counted tracking.
 /// </summary>
-public abstract class RefCountedMemoryPool<T> : MemoryPool<T>
+internal abstract class RefCountedMemoryPool<T> : MemoryPool<T>
 {
     /// <summary>
     /// Gets a <see cref="RefCountedMemoryPool{T}"/> that uses <see cref="ArrayPool{T}"/>.
@@ -153,7 +153,7 @@ public abstract class RefCountedMemoryPool<T> : MemoryPool<T>
 /// <summary>
 /// A <see cref="MemoryManager{T}"/> implementation that incorporates reference-counted tracking.
 /// </summary>
-public abstract partial class RefCountedMemoryManager<T> : MemoryManager<T>, IDisposable // re-implement
+internal abstract partial class RefCountedMemoryManager<T> : MemoryManager<T>, IDisposable // re-implement
 {
     /// <inheritdoc/>
     public sealed override Memory<T> Memory
@@ -366,18 +366,18 @@ internal sealed class WrappedRefCountedMemoryPool<T> : RefCountedMemoryPool<T>
 
 }
 
-public readonly partial struct Frame
+readonly partial struct Frame
 {
     /// <summary>
     /// Create a new <see cref="Builder"/> for constructing <see cref="Frame"/> values.
     /// </summary>
-    public static Builder CreateBuilder(RefCountedMemoryPool<byte>? pool = default, ILogger? logger = null)
+    internal static Builder CreateBuilder(RefCountedMemoryPool<byte>? pool = default, ILogger? logger = null)
         => new Builder(pool ?? RefCountedMemoryPool<byte>.Shared, logger);
 
     /// <summary>
     /// Assists with constructing <see cref="Frame"/> values, either from a source stream (etc), or from a writer.
     /// </summary>
-    public struct Builder
+    internal struct Builder
     {
         private readonly RefCountedMemoryPool<byte> _pool;
         private Memory<byte> _oversizedCurrentFrame;

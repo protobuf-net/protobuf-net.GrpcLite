@@ -48,15 +48,25 @@ internal sealed class SocketFrameConnection : IFrameConnection
 #endif
     }
 
-    async Task IFrameConnection.ReadAllAsync(Func<Frame, ValueTask> action, CancellationToken cancellationToken)
+    OverlappedMicroChannel<Frame>? _readChannel;
+    ChannelReader<Frame> IFrameConnection.ReadAsync(CancellationToken cancellationToken)
+    {
+        if (OverlappedMicroChannel<Frame>.Create(ref _readChannel, cancellationToken))
+        {
+            _ = Task.Run(PushToChannel);
+        }
+        return _readChannel;
+    }
+
+    private async Task PushToChannel()
     {
         var builder = Frame.CreateBuilder(logger: _logger);
         var readArgs = new SocketAwaitableEventArgs();
-        CancellationTokenRegistration ctr = RegisterForCancellation(readArgs, cancellationToken);
+        CancellationTokenRegistration ctr = RegisterForCancellation(readArgs, _readChannel!.CancellationToken);
         try
         {
             int bytesRead;
-            while (!cancellationToken.IsCancellationRequested)
+            while (!_readChannel!.CancellationToken.IsCancellationRequested)
             {
                 _logger.Debug(builder.GetBuffer(), static (state, _) => $"reading up-to {state.Length} bytes from stream...");
                 try
@@ -81,14 +91,23 @@ internal sealed class SocketFrameConnection : IFrameConnection
                 while (builder.TryRead(ref bytesRead, out var frame))
                 {
                     _logger.Debug((frame, builder, bytesRead), static (state, _) => $"parsed {state.frame}; {state.bytesRead} remaining");
-                    await action(frame);
+                    while (!_readChannel.TryWrite(frame))
+                    {
+                        await _readChannel.WriteToWriteAsync();
+                    }
                 }
             }
-            if (!cancellationToken.IsCancellationRequested)
+            if (!_readChannel!.CancellationToken.IsCancellationRequested)
             {
                 if (builder.InProgress) ThrowEOF(); // incomplete frame detected
                 static void ThrowEOF() => throw new EndOfStreamException();
             }
+            _readChannel!.TryComplete();
+        }
+        catch (Exception ex)
+        {
+            _readChannel?.TryComplete(ex);
+            _logger.Error(ex);
         }
         finally
         {

@@ -200,7 +200,7 @@ static class Program
             }
             timings.Clear();
             Console.WriteLine();
-            Console.WriteLine("A: contract-first (.proto/protoc), B: code-first (protobuf-net)");
+            Console.WriteLine("A: contract-first (.proto/protoc), B: code-first (protobuf-net), C: parallel code-first");
             return 0;
         }
         catch (Exception ex)
@@ -544,7 +544,7 @@ static class Program
             }
 
             // store the average nanos-per-op
-            timings.Add("B:" + test.ToString(), (
+            timings.Add("C:" + test.ToString(), (
                 AutoScale(unarySequential / repeatCount, true),
                 AutoScale(unaryConcurrent / repeatCount, true),
                 AutoScale(clientStreamingBuffered / repeatCount, true),
@@ -557,7 +557,7 @@ static class Program
         catch (Exception ex)
         {
             Console.Error.WriteLine($"[{channel.Target}]: {ex.Message}");
-            timings["B:" + test.ToString()] = ("err", "err", "err", "err", "err", "err", "err");
+            timings["C:" + test.ToString()] = ("err", "err", "err", "err", "err", "err", "err");
         }
 
         static long ShowTiming(string label, Stopwatch watch, int operations)

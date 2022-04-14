@@ -18,5 +18,5 @@ public interface IFrameConnection : IDisposable
     /// <summary>
     /// Reads all frames from the underlying source, invoking the supplied action for each.
     /// </summary>
-    Task ReadAllAsync(Func<Frame, ValueTask> action, CancellationToken cancellationToken = default);
+    ChannelReader<Frame> ReadAsync(CancellationToken cancellationToken = default);
 }

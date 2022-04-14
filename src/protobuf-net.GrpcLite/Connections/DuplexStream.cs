@@ -9,7 +9,7 @@ namespace ProtoBuf.Grpc.Lite.Connections;
 /// <summary>
 /// Allows two streams to be combined, routing reads and writes accordingly.
 /// </summary>
-public sealed class DuplexStream : Stream
+internal sealed class DuplexStream : Stream
 {
     private readonly Stream _read;
     private readonly Stream _write;
