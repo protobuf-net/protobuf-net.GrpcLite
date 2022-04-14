@@ -39,9 +39,9 @@ public class BasicTests
     static string Me([CallerMemberName] string caller = "") => caller;
 
     [Fact]
-    public async ValueTask CanCreateInvoker()
+    public void CanCreateInvoker()
     {
-        await using var channel = new LiteChannel(new StreamFrameConnection(Stream.Null), Me());
+        using var channel = new LiteChannel(new StreamFrameConnection(Stream.Null), Me());
         var invoker = channel.CreateCallInvoker();
     }
 
@@ -147,7 +147,7 @@ public class BasicTests
     {
         var pipe = CreateClientPipe(out var server);
         using var cts = Timeout();
-        await using var channel = new LiteChannel(pipe, Me(), Logger);
+        using var channel = new LiteChannel(pipe, Me(), Logger);
         var invoker = channel.CreateCallInvoker();
         using var call = invoker.AsyncUnaryCall(new Method<string, string>(MethodType.Unary, "myservice", "mymethod", StringMarshaller_Simple, StringMarshaller_Simple), "",
             default(CallOptions).WithCancellationToken(cts.Token), "hello, world!");
@@ -156,7 +156,7 @@ public class BasicTests
         var oce = await Assert.ThrowsAsync<OperationCanceledException>(() => call.ResponseAsync);
         Assert.Equal(cts.Token, oce.CancellationToken);
         await Task.Delay(100);
-        await pipe.SafeDisposeAsync();
+        pipe.SafeDispose();
         var hex = await GetHexAsync(server);
         Assert.Equal(
             "02-00-00-00-00-00-15-80-" // unary, id 0/0, length 19 (final)
@@ -184,7 +184,7 @@ public class BasicTests
     {
         var pipe = CreateClientPipe(out var server);
         using var cts = Timeout();
-        await using var channel = new LiteChannel(pipe, Me(), Logger);
+        using var channel = new LiteChannel(pipe, Me(), Logger);
         var invoker = channel.CreateCallInvoker();
 
         // we don't expect a reply
@@ -193,7 +193,7 @@ public class BasicTests
         Assert.Equal(cts.Token, oce.CancellationToken);
         await Task.Delay(100);
         Logger.Information("disposing...");
-        await pipe.SafeDisposeAsync();
+        pipe.SafeDispose();
         Logger.Information("disposed");
 
         var hex = await GetHexAsync(server);

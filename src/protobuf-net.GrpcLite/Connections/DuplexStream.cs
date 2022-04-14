@@ -69,7 +69,9 @@ public sealed class DuplexStream : Stream
     public override ValueTask DisposeAsync()
     {
         GC.SuppressFinalize(this);
-        return Utilities.SafeDisposeAsync(_read, _write);
+        _read.SafeDispose();
+        if (!ReferenceEquals(_read, _write)) _write.SafeDispose();
+        return default;
     }
 #endif
 
@@ -79,7 +81,7 @@ public sealed class DuplexStream : Stream
         if (disposing)
         {
             _read.SafeDispose();
-            _write.SafeDispose();
+            if (!ReferenceEquals(_read, _write)) _write.SafeDispose();
         }
     }
     /// <inheritdoc/>

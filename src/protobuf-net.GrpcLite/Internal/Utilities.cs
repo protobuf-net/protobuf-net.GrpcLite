@@ -51,55 +51,6 @@ internal static partial class Utilities
         }
         return length;
     }
-    public static ValueTask SafeDisposeAsync(this IAsyncDisposable? disposable)
-    {
-        if (disposable is not null)
-        {
-            try
-            {
-                var pending = disposable.DisposeAsync();
-                if (!pending.IsCompleted) return CatchAsync(pending);
-                // we always need to observe it, for both success and failure
-                pending.GetAwaiter().GetResult();
-            }
-            catch { } // swallow
-        }
-        return default;
-
-        static async ValueTask CatchAsync(ValueTask pending)
-        {
-            try { await pending; }
-            catch { } // swallow
-        }
-    }
-
-    public static ValueTask SafeDisposeAsync(IAsyncDisposable? first, IAsyncDisposable? second)
-    {
-        // handle null/same
-        if (first is null || ReferenceEquals(first, second)) return second.SafeDisposeAsync();
-        if (second is null) return first.SafeDisposeAsync();
-
-        // so: different
-        var firstPending = first.SafeDisposeAsync();
-        var secondPending = second.SafeDisposeAsync();
-        if (firstPending.IsCompletedSuccessfully)
-        {
-            firstPending.GetAwaiter().GetResult(); // ensuure observed
-            return secondPending;
-        }
-        if (secondPending.IsCompletedSuccessfully)
-        {
-            secondPending.GetAwaiter().GetResult();
-            return firstPending;
-        }
-        // so: neither completed synchronously!
-        return Both(firstPending, secondPending);
-        static async ValueTask Both(ValueTask first, ValueTask second)
-        {
-            await first;
-            await second;
-        }
-    }
 
 
     public static readonly Task<bool> AsyncTrue = Task.FromResult(true), AsyncFalse = Task.FromResult(false);
@@ -226,61 +177,61 @@ internal static partial class Utilities
 
     public static Task IncompleteTask { get; } = AsyncTaskMethodBuilder.Create().Task;
 
-    public static IAsyncEnumerator<TValue> GetAsyncEnumerator<T, TValue>(this ChannelReader<T> input, ChannelWriter<T>? closeOutput,
-        Func<T, TValue> selector, CancellationToken cancellationToken)
-    {
-        return closeOutput is not null ? FullyChecked(input, closeOutput, selector, cancellationToken)
-            : Simple(input, selector, cancellationToken);
+    //public static IAsyncEnumerator<TValue> GetAsyncEnumerator<T, TValue>(this ChannelReader<T> input, ChannelWriter<T>? closeOutput,
+    //    Func<T, TValue> selector, CancellationToken cancellationToken)
+    //{
+    //    return closeOutput is not null ? FullyChecked(input, closeOutput, selector, cancellationToken)
+    //        : Simple(input, selector, cancellationToken);
 
-        static async IAsyncEnumerator<TValue> Simple(ChannelReader<T> input, Func<T, TValue> selector, CancellationToken cancellationToken)
-        {
-            do
-            {
-                while (input.TryRead(out var item))
-                    yield return selector(item);
-            }
-            while (await input.WaitToReadAsync(cancellationToken));
-        }
+    //    static async IAsyncEnumerator<TValue> Simple(ChannelReader<T> input, Func<T, TValue> selector, CancellationToken cancellationToken)
+    //    {
+    //        do
+    //        {
+    //            while (input.TryRead(out var item))
+    //                yield return selector(item);
+    //        }
+    //        while (await input.WaitToReadAsync(cancellationToken));
+    //    }
 
-        static async IAsyncEnumerator<TValue> FullyChecked(ChannelReader<T> input, ChannelWriter<T>? closeOutput, Func<T, TValue> selector, CancellationToken cancellationToken)
-        {
-            // we need to do some code gymnastics to ensure that we close the connection (with an exception
-            // as necessary) in all cases
-            while (true)
-            {
-                bool haveItem;
-                T? item;
-                do
-                {
-                    try
-                    {
-                        haveItem = input.TryRead(out item);
-                    }
-                    catch (Exception ex)
-                    {
-                        closeOutput?.TryComplete(ex);
-                        throw;
-                    }
-                    if (haveItem) yield return selector(item!);
-                }
-                while (haveItem);
+    //    static async IAsyncEnumerator<TValue> FullyChecked(ChannelReader<T> input, ChannelWriter<T>? closeOutput, Func<T, TValue> selector, CancellationToken cancellationToken)
+    //    {
+    //        // we need to do some code gymnastics to ensure that we close the connection (with an exception
+    //        // as necessary) in all cases
+    //        while (true)
+    //        {
+    //            bool haveItem;
+    //            T? item;
+    //            do
+    //            {
+    //                try
+    //                {
+    //                    haveItem = input.TryRead(out item);
+    //                }
+    //                catch (Exception ex)
+    //                {
+    //                    closeOutput?.TryComplete(ex);
+    //                    throw;
+    //                }
+    //                if (haveItem) yield return selector(item!);
+    //            }
+    //            while (haveItem);
 
-                try
-                {
-                    if (!await input.WaitToReadAsync(cancellationToken))
-                    {
-                        closeOutput?.TryComplete();
-                        yield break;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    closeOutput?.TryComplete(ex);
-                    throw;
-                }
-            }
-        }
-    }
+    //            try
+    //            {
+    //                if (!await input.WaitToReadAsync(cancellationToken))
+    //                {
+    //                    closeOutput?.TryComplete();
+    //                    yield break;
+    //                }
+    //            }
+    //            catch (Exception ex)
+    //            {
+    //                closeOutput?.TryComplete(ex);
+    //                throw;
+    //            }
+    //        }
+    //    }
+    //}
 
     internal static CancellationTokenRegistration RegisterCancellation(this IStream stream, CancellationToken cancellationToken)
     {

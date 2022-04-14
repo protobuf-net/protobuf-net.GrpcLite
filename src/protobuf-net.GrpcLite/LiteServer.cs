@@ -18,7 +18,7 @@ namespace ProtoBuf.Grpc.Lite;
 /// <summary>
 /// A lightweight gRPC server implementation.
 /// </summary>
-public sealed class LiteServer : IDisposable, IAsyncDisposable
+public sealed class LiteServer : IDisposable
 {
     /// <summary>
     /// Create a new instance.
@@ -41,11 +41,6 @@ public sealed class LiteServer : IDisposable, IAsyncDisposable
     public void Stop() => _serverShutdown.Cancel();
 
     void IDisposable.Dispose() => Stop();
-    ValueTask IAsyncDisposable.DisposeAsync()
-    {
-        Stop();
-        return default;
-    }
 
     /// <summary>
     /// Create an in-process client channel to this server that still uses serialization and routing, but does not go via the network stack etc.

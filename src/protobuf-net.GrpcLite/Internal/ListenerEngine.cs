@@ -16,7 +16,7 @@ internal interface IConnection
 {
     bool IsClient { get; }
     ChannelWriter<(Frame Frame, FrameWriteFlags Flags)> Output { get; }
-    IAsyncEnumerable<Frame> Input { get; }
+    Task ReadAllAsync(Func<Frame, ValueTask> action, CancellationToken cancellationToken = default);
     bool TryCreateStream(in Frame initialize, ReadOnlyMemory<char> route, [MaybeNullWhen(false)] out IStream stream);
 
     ConcurrentDictionary<ushort, IStream> Streams { get; }
@@ -39,10 +39,7 @@ internal static class ListenerEngine
         try
         {
             logger.Debug(connection, static (state, _) => $"connection {state} ({(state.IsClient ? "client" : "server")}) processing streams...");
-            await using var iter = connection.Input.GetAsyncEnumerator(cancellationToken);
-            while (!cancellationToken.IsCancellationRequested && await iter.MoveNextAsync())
-            {
-                frame = iter.Current;
+            await connection.ReadAllAsync(async frame => {
                 var header = frame.GetHeader();
                 logger.Debug(frame, static (state, _) => $"received frame {state}");
                 bool release = true;
@@ -166,7 +163,7 @@ internal static class ListenerEngine
                     frame.Release();
                     frame = default;
                 }
-            }
+            }, cancellationToken);
 
             logger.Debug(connection, static (state, _) => $"connection {state} ({(state.IsClient ? "client" : "server")}) exiting cleanly");
             connection.Output.Complete(null);

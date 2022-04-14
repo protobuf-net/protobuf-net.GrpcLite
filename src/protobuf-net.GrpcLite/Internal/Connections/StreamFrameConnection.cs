@@ -11,6 +11,7 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
+using System.Threading.Tasks.Sources;
 
 namespace ProtoBuf.Grpc.Lite.Internal.Connections;
 
@@ -32,9 +33,8 @@ internal sealed class StreamFrameConnection : IFrameConnection
         _outputBufferSize = outputBufferSize < 0 ? DefaultOutputBuffer : outputBufferSize; //-ve means "let chef decide"
     }
 
-    public ValueTask DisposeAsync() => _duplex.SafeDisposeAsync();
-
-    public async IAsyncEnumerator<Frame> GetAsyncEnumerator(CancellationToken cancellationToken = default)
+    public void Dispose() => _duplex.SafeDispose();
+    async Task IFrameConnection.ReadAllAsync(Func<Frame, ValueTask> action, CancellationToken cancellationToken)
     {
         var builder = Frame.CreateBuilder(logger: _logger);
         try
@@ -57,7 +57,7 @@ internal sealed class StreamFrameConnection : IFrameConnection
                 while (builder.TryRead(ref bytesRead, out var frame))
                 {
                     _logger.Debug((frame, builder, bytesRead), static (state, _) => $"parsed {state.frame}; {state.bytesRead} remaining");
-                    yield return frame;
+                    await action(frame);
                 }
             }
             if (!cancellationToken.IsCancellationRequested)

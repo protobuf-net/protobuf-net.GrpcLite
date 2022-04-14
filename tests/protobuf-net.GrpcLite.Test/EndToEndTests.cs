@@ -86,7 +86,7 @@ public class EndToEndTests : IClassFixture<TestServerHost>
     {
         using var log = ServerLog();
         using var timeout = After();
-        await using var client = await ConnectAsync(kind, out var options, timeout.Token);
+        using var client = await ConnectAsync(kind, out var options, timeout.Token);
         var proxy = new FooService.FooServiceClient(client);
 
         for (int i = 0; i < count; i++)
@@ -107,7 +107,7 @@ public class EndToEndTests : IClassFixture<TestServerHost>
     {
         using var log = ServerLog();
         using var timeout = After();
-        await using var client = await ConnectAsync(kind, out var options, timeout.Token);
+        using var client = await ConnectAsync(kind, out var options, timeout.Token);
         var proxy = new FooService.FooServiceClient(client);
 
         for (int i = 0; i < count; i++)
@@ -131,7 +131,7 @@ public class EndToEndTests : IClassFixture<TestServerHost>
     {
         using var log = ServerLog();
         using var timeout = After();
-        await using var client = await ConnectAsync(kind, out var options, timeout.Token);
+        using var client = await ConnectAsync(kind, out var options, timeout.Token);
         var proxy = new FooService.FooServiceClient(client);
 
         for (int i = 0; i < count; i++)
@@ -171,7 +171,7 @@ public class EndToEndTests : IClassFixture<TestServerHost>
     {
         using var log = ServerLog();
         using var timeout = After();
-        await using var client = await ConnectAsync(kind, out var options, timeout.Token);
+        using var client = await ConnectAsync(kind, out var options, timeout.Token);
 
         var proxy = new FooService.FooServiceClient(client);
 
@@ -201,7 +201,7 @@ public class EndToEndTests : IClassFixture<TestServerHost>
     {
         using var log = ServerLog();
         using var timeout = After();
-        await using var client = await ConnectAsync(kind, out var options, timeout.Token);
+        using var client = await ConnectAsync(kind, out var options, timeout.Token);
 
         var proxy = new FooService.FooServiceClient(client);
 
@@ -230,7 +230,7 @@ public class EndToEndTests : IClassFixture<TestServerHost>
     {
         using var log = ServerLog();
         using var timeout = After();
-        await using var client = await ConnectAsync(kind, out var options, timeout.Token);
+        using var client = await ConnectAsync(kind, out var options, timeout.Token);
         var proxy = new FooService.FooServiceClient(client);
 
         using var call = proxy.ClientStreaming(options);

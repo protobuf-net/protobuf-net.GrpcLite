@@ -1,6 +1,5 @@
 ﻿using ProtoBuf.Grpc.Lite.Connections;
 using System;
-using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
@@ -28,14 +27,30 @@ internal sealed class NullConnection : IFrameConnection
         _output = output;
     }
 
-    ValueTask IAsyncDisposable.DisposeAsync()
+    void IDisposable.Dispose()
     {
         _output.TryComplete();
-        return default;
     }
 
-    IAsyncEnumerator<Frame> IAsyncEnumerable<Frame>.GetAsyncEnumerator(CancellationToken cancellationToken)
-        => _input.GetAsyncEnumerator(_output, static pair => pair.Frame, cancellationToken);
+    async Task IFrameConnection.ReadAllAsync(Func<Frame, ValueTask> action, CancellationToken cancellationToken)
+    {
+        try
+        {
+            do
+            {
+                while (_input.TryRead(out var pair))
+                {
+                    await action(pair.Frame);
+                }
+            }
+            while (await _input.WaitToReadAsync(cancellationToken));
+            _output.TryComplete(); // signal the EOF scenario
+        }
+        catch (Exception ex)
+        {
+            _output.TryComplete(ex); // try to signal the problem - we're broken
+        }
+    }
 
     Task IFrameConnection.WriteAsync(ChannelReader<(Frame Frame, FrameWriteFlags Flags)> source, CancellationToken cancellationToken)
         => source.Completion;

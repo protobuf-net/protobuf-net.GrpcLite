@@ -38,7 +38,7 @@ public static class ConnectionFactory
         }
         catch
         {
-            await pipe.SafeDisposeAsync();
+            pipe.SafeDispose();
             throw;
         }
     };
@@ -62,7 +62,7 @@ public static class ConnectionFactory
         }
         catch
         {
-            await pipe.SafeDisposeAsync();
+            pipe.SafeDispose();
             throw;
         }
     };
@@ -139,9 +139,9 @@ public static class ConnectionFactory
             catch (Exception ex)
             {
                 source.Logger.Error(ex);
-                if (source.Value is IAsyncDisposable disposable)
+                if (source.Value is IDisposable disposable)
                 {
-                    await disposable.SafeDisposeAsync();
+                    disposable.SafeDispose();
                 }
                 throw;
             }
@@ -165,7 +165,7 @@ public static class ConnectionFactory
         }
         catch
         {
-            await pair.SafeDisposeAsync();
+            pair.SafeDispose();
             throw;
         }
     };
@@ -189,7 +189,7 @@ public static class ConnectionFactory
             }
             catch
             {
-                await source.Value.SafeDisposeAsync();
+                source.Value.SafeDispose();
                 throw;
             }
         };
@@ -213,7 +213,7 @@ public static class ConnectionFactory
             }
             catch
             {
-                await source.Value.SafeDisposeAsync();
+                source.Value.SafeDispose();
                 throw;
             }
         };
@@ -238,7 +238,7 @@ public static class ConnectionFactory
             }
             catch
             {
-                await source.Value.SafeDisposeAsync();
+                source.Value.SafeDispose();
                 throw;
             }
         };
@@ -275,7 +275,7 @@ public static class ConnectionFactory
         }
         catch
         {
-            await source.Value.SafeDisposeAsync();
+            source.Value.SafeDispose();
             throw;
         }
     };
@@ -310,7 +310,7 @@ public static class ConnectionFactory
         }
         catch
         {
-            await source.Value.SafeDisposeAsync();
+            source.Value.SafeDispose();
             throw;
         }
     };
@@ -331,7 +331,7 @@ public static class ConnectionFactory
             }
             catch
             {
-                await source.Value.SafeDisposeAsync();
+                source.Value.SafeDispose();
                 throw;
             }
         };
@@ -431,7 +431,7 @@ public static class ConnectionFactory
         }
         catch
         {
-            await source.Value.SafeDisposeAsync();
+            source.Value.SafeDispose();
             throw;
         }
     }

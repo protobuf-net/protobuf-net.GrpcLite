@@ -99,7 +99,7 @@ internal sealed class LiteCallInvoker : CallInvoker, IConnection, IWorker
 
     bool IConnection.IsClient => true;
 
-    IAsyncEnumerable<Frame> IConnection.Input => _connection;
+    Task IConnection.ReadAllAsync(Func<Frame, ValueTask> action, CancellationToken cancellationToken) => _connection.ReadAllAsync(action, cancellationToken);
 
     ConcurrentDictionary<ushort, IStream> IConnection.Streams => _streams;
 

@@ -15,16 +15,11 @@ namespace ProtoBuf.Grpc.Lite.Internal
     static partial class Utilities
     {
 #if NET472
-        public static ValueTask SafeDisposeAsync(this Stream stream)
-        {
-            stream.SafeDispose();
-            return default;
-        }
-        public static Task<int> ReadAsync(this Stream stream, Memory<byte> buffer, CancellationToken cancellationToken)
+        public static ValueTask<int> ReadAsync(this Stream stream, Memory<byte> buffer, CancellationToken cancellationToken)
         {
             static void Throw() => throw new NotSupportedException("Array-based buffer required");
             if (!MemoryMarshal.TryGetArray<byte>(buffer, out var segment)) Throw();
-            return stream.ReadAsync(segment.Array, segment.Offset, segment.Count, cancellationToken);
+            return new ValueTask<int>(stream.ReadAsync(segment.Array, segment.Offset, segment.Count, cancellationToken));
         }
         public static ValueTask WriteAsync(this Stream stream, ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken)
         {

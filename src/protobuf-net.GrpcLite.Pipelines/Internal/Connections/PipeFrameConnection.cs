@@ -28,13 +28,12 @@ internal sealed class PipeFrameConnection : IFrameConnection
         try { _pipe.Input.Complete(exception); } catch { }
         try { _pipe.Output.Complete(exception); } catch { }
     }
-    ValueTask IAsyncDisposable.DisposeAsync()
+    void IDisposable.Dispose()
     {
         Close(null);
-        return default;
     }
 
-    async IAsyncEnumerator<Frame> IAsyncEnumerable<Frame>.GetAsyncEnumerator(CancellationToken cancellationToken)
+    async Task IFrameConnection.ReadAllAsync(Func<Frame, ValueTask> action, CancellationToken cancellationToken)
     {
         _logger.Debug(this, static (state, _) => $"pipe reader starting");
         var builder = Frame.CreateBuilder();
@@ -60,7 +59,7 @@ internal sealed class PipeFrameConnection : IFrameConnection
                 _logger.Debug(buffer, static (state, _) => $"pipe reader provided {state.Length} bytes; parsing {state.ToHex()}");
                 while (builder.TryRead(ref buffer, out var frame))
                 {
-                    yield return frame;
+                    await action(frame);
                 }
                 _pipe.Input.AdvanceTo(buffer.Start, buffer.End);
                 Debug.Assert(buffer.IsEmpty, "we expect to consume the entire buffer"); // because we can't trust the pipe's allocator :(

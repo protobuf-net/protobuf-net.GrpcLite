@@ -28,10 +28,9 @@ internal sealed class SocketFrameConnection : IFrameConnection
         _outputBufferSize = outputBufferSize;
     }
 
-    ValueTask IAsyncDisposable.DisposeAsync()
+    void IDisposable.Dispose()
     {
         _socket.SafeDispose();
-        return default;
     }
 
 
@@ -48,7 +47,8 @@ internal sealed class SocketFrameConnection : IFrameConnection
         args.SetBuffer(value);
 #endif
     }
-    async IAsyncEnumerator<Frame> IAsyncEnumerable<Frame>.GetAsyncEnumerator(CancellationToken cancellationToken)
+
+    async Task IFrameConnection.ReadAllAsync(Func<Frame, ValueTask> action, CancellationToken cancellationToken)
     {
         var builder = Frame.CreateBuilder(logger: _logger);
         var readArgs = new SocketAwaitableEventArgs();
@@ -76,7 +76,7 @@ internal sealed class SocketFrameConnection : IFrameConnection
                 while (builder.TryRead(ref bytesRead, out var frame))
                 {
                     _logger.Debug((frame, builder, bytesRead), static (state, _) => $"parsed {state.frame}; {state.bytesRead} remaining");
-                    yield return frame;
+                    await action(frame);
                 }
             }
             if (!cancellationToken.IsCancellationRequested)

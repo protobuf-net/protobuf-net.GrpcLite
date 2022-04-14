@@ -11,7 +11,7 @@ namespace ProtoBuf.Grpc.Lite;
 /// <summary>
 /// A light-weight gRPC <see cref="ChannelBase"/> implementation, for gRPC clients.
 /// </summary>
-public sealed class LiteChannel : ChannelBase, IDisposable, IAsyncDisposable
+public sealed class LiteChannel : ChannelBase, IDisposable
 {
     LiteCallInvoker _callInvoker;
     internal LiteChannel(IFrameConnection connection, string target, ILogger? logger = null) : base(target)
@@ -29,15 +29,6 @@ public sealed class LiteChannel : ChannelBase, IDisposable, IAsyncDisposable
     public void Dispose()
     {
         _callInvoker.StopWorker();
-    }
-
-    /// <summary>
-    /// Releases all resources associated with this instance.
-    /// </summary>
-    public ValueTask DisposeAsync()
-    {
-        _callInvoker.StopWorker();
-        return default;
     }
 
     /// <inheritdoc/>
