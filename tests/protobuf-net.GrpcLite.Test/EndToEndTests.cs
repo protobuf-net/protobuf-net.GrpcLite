@@ -3,6 +3,7 @@ using Grpc.Core.Interceptors;
 using Microsoft.Extensions.Logging;
 using ProtoBuf;
 using ProtoBuf.Grpc;
+using ProtoBuf.Grpc.Client;
 using ProtoBuf.Grpc.Configuration;
 using ProtoBuf.Grpc.Lite;
 using System;
@@ -29,19 +30,14 @@ public class EndToEndTests : IClassFixture<TestServerHost>
     private ValueTask<LiteChannel> ConnectAsync(ConnectionKind kind, out CallOptions options, CancellationToken cancellationToken)
     {
         options = default(CallOptions).WithCancellationToken(cancellationToken);
-        switch (kind)
+        return kind switch
         {
-            case ConnectionKind.Null:
-                return new(Server.ConnectLocal());
-            case ConnectionKind.NamedPipeVanilla:
-                return ConnectionFactory.ConnectNamedPipe(Name, logger: Logger).AsFrames(mergeWrites: false, outputBufferSize: 0).CreateChannelAsync(cancellationToken);
-            case ConnectionKind.NamedPipeMerged:
-                return ConnectionFactory.ConnectNamedPipe(Name, logger: Logger).AsFrames(mergeWrites: true, outputBufferSize: 0).CreateChannelAsync(cancellationToken);
-            case ConnectionKind.NamedPipeBuffered:
-                return ConnectionFactory.ConnectNamedPipe(Name, logger: Logger).AsFrames(mergeWrites: false, outputBufferSize: -1).CreateChannelAsync(cancellationToken);
-            default:
-                throw new ArgumentOutOfRangeException(nameof(kind));
-        }
+            ConnectionKind.Null => new(Server.ConnectLocal()),
+            ConnectionKind.NamedPipeVanilla => ConnectionFactory.ConnectNamedPipe(Name, logger: Logger).AsFrames(mergeWrites: false, outputBufferSize: 0).CreateChannelAsync(cancellationToken),
+            ConnectionKind.NamedPipeMerged => ConnectionFactory.ConnectNamedPipe(Name, logger: Logger).AsFrames(mergeWrites: true, outputBufferSize: 0).CreateChannelAsync(cancellationToken),
+            ConnectionKind.NamedPipeBuffered => ConnectionFactory.ConnectNamedPipe(Name, logger: Logger).AsFrames(mergeWrites: false, outputBufferSize: -1).CreateChannelAsync(cancellationToken),
+            _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+        };
     }
 
     private readonly TestServerHost Server;
@@ -56,7 +52,8 @@ public class EndToEndTests : IClassFixture<TestServerHost>
 
     private readonly ITestOutputHelper _output;
 
-    public static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(10);
+    public const int DefaultTimeoutSeconds = 10;
+    public static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(DefaultTimeoutSeconds);
     CancellationTokenSource After() => After(DefaultTimeout);
 
     CancellationTokenSource After(TimeSpan timeout)
@@ -78,6 +75,61 @@ public class EndToEndTests : IClassFixture<TestServerHost>
             yield return new object[] { kind, 100 };
             yield return new object[] { kind, 1000 };
         }
+    }
+
+    [Theory]
+    [InlineData(ConnectionKind.Null, 10)]
+    [InlineData(ConnectionKind.Null, 1000)]
+#if RELEASE
+    [InlineData(ConnectionKind.Null, 35000, 30)] // more than 16-bit
+    [InlineData(ConnectionKind.Null, 150000, 30)]
+#endif
+    public async Task LotsOfCallsAsync(ConnectionKind kind, int count, int timeoutSeconds = DefaultTimeoutSeconds)
+    {
+        using var timeout = After(TimeSpan.FromSeconds(timeoutSeconds));
+        using var log = ServerLog();
+        using var client = await ConnectAsync(kind, out var options, timeout.Token);
+        var proxy = client.CreateGrpcService<ILotsOfCallsService>();
+        for (int i = 0; i < count; i++)
+        {
+            await proxy.SomeFastMethodAsync(timeout.Token);
+        }
+    }
+
+    [Theory]
+    [InlineData(ConnectionKind.Null, 10)]
+    [InlineData(ConnectionKind.Null, 1000)]
+#if RELEASE
+    [InlineData(ConnectionKind.Null, 35000)] // more than 16-bit
+#endif
+    public async Task LotsOfCancelledCallsAsync(ConnectionKind kind, int count)
+    {
+        using var connectTimeout = After();
+        using var log = ServerLog();
+        using var client = await ConnectAsync(kind, out var options, connectTimeout.Token);
+        var proxy = client.CreateGrpcService<ILotsOfCallsService>();
+        int cancelled = 0;
+        for (int i = 0; i < count; i++)
+        {
+            using var callTimeout = After(TimeSpan.FromMilliseconds(5));
+            try
+            {
+                await proxy.SomeSlowMethodAsync(callTimeout.Token);
+                Assert.False(true); // fail
+            }
+            catch (OperationCanceledException) when (callTimeout.IsCancellationRequested)
+            {
+                cancelled++;
+            }
+        }
+        Assert.Equal(count, cancelled);
+    }
+
+    [Service]
+    public interface ILotsOfCallsService
+    {
+        public ValueTask SomeFastMethodAsync(CancellationToken cancellationToken = default);
+        public ValueTask SomeSlowMethodAsync(CancellationToken cancellationToken = default);
     }
 
     [Theory]
@@ -300,6 +352,7 @@ public class TestServerHost : IDisposable, ILogger
         var svc = new MyContractFirstService();
         svc.Log += message => this.Information(message);
         _server.ServiceBinder.Bind<MyContractFirstService>(svc);
+        _server.ServiceBinder.AddCodeFirst<EndToEndTests.ILotsOfCallsService>(svc);
 
         Debug.WriteLine($"starting listener {Name}...");
         _server.ListenAsync(ConnectionFactory.ListenNamedPipe(Name, logger: this));
@@ -371,7 +424,7 @@ public sealed class MyInterceptor : Interceptor
 
     class InterceptorStreamWriter<TResponse> : IServerStreamWriter<TResponse>
     {
-        private IServerStreamWriter<TResponse> _tail;
+        private readonly IServerStreamWriter<TResponse> _tail;
 
         public InterceptorStreamWriter(IServerStreamWriter<TResponse> responseStream) => _tail = responseStream;
 
@@ -428,7 +481,7 @@ public class MyCodeFirstService : IMyService
         }
     }
 }
-public class MyContractFirstService : FooService.FooServiceBase
+public class MyContractFirstService : FooService.FooServiceBase, EndToEndTests.ILotsOfCallsService
 {
     public event Action<string>? Log;
 
@@ -502,6 +555,11 @@ public class MyContractFirstService : FooService.FooServiceBase
         OnLog("client-streaming returning");
         return new FooResponse { Value = sum };
     }
+
+    ValueTask EndToEndTests.ILotsOfCallsService.SomeFastMethodAsync(CancellationToken cancellationToken) => default;
+
+    ValueTask EndToEndTests.ILotsOfCallsService.SomeSlowMethodAsync(CancellationToken cancellationToken)
+        => new ValueTask(Task.Delay(100, cancellationToken));
 }
 
 public sealed class ConsoleLogger : ILogger, IDisposable
