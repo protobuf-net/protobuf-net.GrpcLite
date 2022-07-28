@@ -428,7 +428,7 @@ public sealed class MyInterceptor : Interceptor
 
         public InterceptorStreamWriter(IServerStreamWriter<TResponse> responseStream) => _tail = responseStream;
 
-        WriteOptions IAsyncStreamWriter<TResponse>.WriteOptions
+        WriteOptions? IAsyncStreamWriter<TResponse>.WriteOptions
         {
             get => _tail.WriteOptions;
             set => _tail.WriteOptions = value;

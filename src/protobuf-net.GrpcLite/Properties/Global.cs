@@ -14,7 +14,7 @@ namespace System.Runtime.CompilerServices
 }
 #endif
 
-#if NET472
+#if NET462 || NET472
 namespace System.Diagnostics.CodeAnalysis
 {
     [AttributeUsage(AttributeTargets.Method, Inherited = false)]

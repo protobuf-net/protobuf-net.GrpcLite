@@ -194,7 +194,7 @@ public static class ConnectionFactory
             }
         };
 
-#if NET472
+#if NET462 || NET472
     /// <summary>
     /// Authenticates the connection as a server.
     /// </summary>
@@ -207,7 +207,11 @@ public static class ConnectionFactory
             {
                 // TODO: support cancellation
                 source.Logger.Debug("Authenticating as server...");
+#if NET462
+                await source.Value.AuthenticateAsServerAsync(serverCertificate, clientCertificateRequired, System.Security.Authentication.SslProtocols.Default, checkCertificateRevocation);
+#else
                 await source.Value.AuthenticateAsServerAsync(serverCertificate, clientCertificateRequired, checkCertificateRevocation);
+#endif
                 source.Logger.Debug(source.Value, static (state, _) => $"Authenticated; server: '{state?.LocalCertificate?.Subject}', client: '{state?.RemoteCertificate?.Subject}'");
                 return source;
             }
@@ -316,10 +320,10 @@ public static class ConnectionFactory
     };
 #endif
 
-    /// <summary>
-    /// Creates a <see cref="Frame"/> processor over a <see cref="Stream"/>.
-    /// </summary>
-    public static Func<CancellationToken, ValueTask<ConnectionState<IFrameConnection>>> AsFrames<T>(
+                /// <summary>
+                /// Creates a <see cref="Frame"/> processor over a <see cref="Stream"/>.
+                /// </summary>
+                public static Func<CancellationToken, ValueTask<ConnectionState<IFrameConnection>>> AsFrames<T>(
         this Func<CancellationToken, ValueTask<ConnectionState<T>>> factory,
         bool mergeWrites = false, int outputBufferSize = -1) where T : Stream
         => async cancellationToken =>

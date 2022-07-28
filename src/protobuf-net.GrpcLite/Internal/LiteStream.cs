@@ -509,7 +509,7 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
         _backlogFrame = default;
         if (_backlogFrames is not null)
         {
-#if NET472
+#if NET462 || NET472
             while (_backlogFrames.Count != 0)
             {
                 _backlogFrames.Dequeue().Release();
@@ -542,7 +542,7 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
         }
 
         // if necessary, reactivate with fault - without risking blocking the listener via callbacks
-#if NET472
+#if NET462 || NET472
         ThreadPool.QueueUserWorkItem(static state =>
         {
             var tuple = (Tuple<LiteStream<TSend, TReceive>, Exception>)state;

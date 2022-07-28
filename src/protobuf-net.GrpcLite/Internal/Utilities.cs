@@ -100,7 +100,7 @@ internal static partial class Utilities
     public static string CreateString(this ArraySegment<char> value)
         => value.Count == 0 ? "" : new string(value.Array ?? Array.Empty<char>(), value.Offset, value.Count);
 
-#if NETSTANDARD2_1 || NET472
+#if NETSTANDARD2_1 || NET462 || NET472
     // note: here we use the sofware fallback implementation from the BCL
     // source: https://github.com/dotnet/runtime/blob/main/src/libraries/System.Private.CoreLib/src/System/Numerics/BitOperations.cs
     // "The .NET Foundation licenses this file to you under the MIT license." (so: we're fine for licensing)
