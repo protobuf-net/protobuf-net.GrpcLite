@@ -25,7 +25,7 @@ interface IStream
     CancellationToken CancellationToken { get; }
     void Cancel();
     IConnection? Connection { get; }
-    WriteOptions WriteOptions { get; set; }
+    WriteOptions? WriteOptions { get; set; }
     bool IsActive { get; }
 }
 
@@ -875,7 +875,7 @@ internal abstract class LiteStream<TSend, TReceive> : IStream, IWorker, IAsyncSt
     }
 
     private WriteOptions? _writeOptions;
-    public WriteOptions WriteOptions
+    public WriteOptions? WriteOptions
     {
         get => _writeOptions ??= WriteOptions.Default;
         set => _writeOptions = value;

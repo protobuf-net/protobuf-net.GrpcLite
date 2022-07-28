@@ -52,7 +52,7 @@ internal sealed class LiteServerCallContext : ServerCallContext, IPooled
         set => _stream!.Status = value;
     }
 
-    protected override WriteOptions WriteOptionsCore
+    protected override WriteOptions? WriteOptionsCore
     {
         get => _stream!.WriteOptions;
         set => _stream!.WriteOptions = value;

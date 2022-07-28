@@ -95,32 +95,10 @@ namespace ProtoBuf.Grpc.Lite.Internal
                 return false;
             }
         }
+#endif
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal static ReadOnlySequence<T> AsReadOnlySequence<T>(this ReadOnlyMemory<T> memory)
-        {
-            // netfx has a nasty bug if you use `new ROS(memory)` with a custom manager with non-zero start; the bug
-            // doesn't apply to sequence segments, though - so if we have a custom manager that doesn't support arrays: use that
-            if (memory.IsEmpty) return default;
-            if (MemoryMarshal.TryGetArray(memory, out var segment))
-                return new ReadOnlySequence<T>(segment.Array, segment.Offset, segment.Count);
-            return ViaManager(memory);
-
-            static ReadOnlySequence<T> ViaManager(ReadOnlyMemory<T> memory)
-            {
-                if (MemoryMarshal.TryGetMemoryManager<T, MemoryManager<T>>(memory, out var manager, out var start, out var length)
-                    && start != 0)
-                {
-                    var seqSegment = manager is RefCountedMemoryManager<T> basic ? basic.SharedSegment : new IsolatedSequenceSegment<T>(manager.Memory);
-                    return new ReadOnlySequence<T>(seqSegment, start, seqSegment, start + length);
-                }
-                return new ReadOnlySequence<T>(memory);
-            }
-        }
-#else
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static ReadOnlySequence<T> AsReadOnlySequence<T>(this ReadOnlyMemory<T> memory) => new ReadOnlySequence<T>(memory);
-#endif
 
 #if NET462
         internal static Task<Socket> AcceptAsync(this Socket socket)
@@ -143,26 +121,3 @@ namespace ProtoBuf.Grpc.Lite.Internal
      
     }
 }
-
-#if NET462 || NET472
-namespace ProtoBuf.Grpc.Lite.Internal
-{
-    internal sealed class IsolatedSequenceSegment<T> : ReadOnlySequenceSegment<T>
-    {
-        public IsolatedSequenceSegment(ReadOnlyMemory<T> memory)
-        {
-            Next = null;
-            Memory = memory;
-            RunningIndex = 0;
-        }
-    }
-}
-namespace ProtoBuf.Grpc.Lite.Connections
-{
-    partial class RefCountedMemoryManager<T>
-    {
-        private ReadOnlySequenceSegment<T>? _singleSegment;
-        internal ReadOnlySequenceSegment<T> SharedSegment => _singleSegment ??= new IsolatedSequenceSegment<T>(Memory);
-    }
-}
-#endif

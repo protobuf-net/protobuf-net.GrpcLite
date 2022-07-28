@@ -100,7 +100,7 @@ public class EndToEndTests : IClassFixture<TestServerHost>
     [InlineData(ConnectionKind.Null, 10)]
     [InlineData(ConnectionKind.Null, 1000)]
 #if RELEASE
-    [InlineData(ConnectionKind.Null, 35000)] // more than 16-bit
+    // [InlineData(ConnectionKind.Null, 35000, Skip = "too long")] // more than 16-bit
 #endif
     public async Task LotsOfCancelledCallsAsync(ConnectionKind kind, int count)
     {
