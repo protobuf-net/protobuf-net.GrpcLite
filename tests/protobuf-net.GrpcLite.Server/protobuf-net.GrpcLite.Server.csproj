@@ -1,19 +1,19 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
-    <TargetFrameworks>net472;net6.0</TargetFrameworks>
+    <TargetFrameworks>net462;net472;net6.0</TargetFrameworks>
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Grpc.AspNetCore" Version="$(GrpcDotNetVersion)" Condition="$(TargetFramework)!='net472'" />
+    <PackageReference Include="Grpc.AspNetCore" Version="$(GrpcDotNetVersion)" Condition="$(TargetFramework)!='net462' and $(TargetFramework)!='net472'" />
     <PackageReference Include="Grpc.Core" Version="$(GrpcDotNetVersion)" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="protobuf-net.Grpc.AspNetCore" Version="$(PBGRPCLibVersion)" Condition="$(TargetFramework)!='net472'"/>
-    <PackageReference Include="protobuf-net.Grpc.Native" Version="$(PBGRPCLibVersion)" Condition="$(TargetFramework)=='net472'"/>
+    <PackageReference Include="protobuf-net.Grpc.AspNetCore" Version="$(PBGRPCLibVersion)" Condition="$(TargetFramework)!='net462' and $(TargetFramework)!='net472'"/>
+    <PackageReference Include="protobuf-net.Grpc.Native" Version="$(PBGRPCLibVersion)" Condition="$(TargetFramework)=='net462' or $(TargetFramework)=='net472'"/>
     <ProjectReference Include="..\protobuf-net.GrpcLite.Test\protobuf-net.GrpcLite.Test.csproj" />
   </ItemGroup>
 

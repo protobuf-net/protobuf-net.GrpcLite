@@ -1,4 +1,4 @@
-#if NET472
+#if NET462 || NET472
 using Grpc.Core;
 #else
 using Microsoft.AspNetCore.Builder;
@@ -28,7 +28,7 @@ RemoteCertificateValidationCallback userCheck = (object sender, X509Certificate?
     return true;
 };
 
-#if NET472
+#if NET462 || NET472
 var interceptor = new MyInterceptor();
 var svc1 = new MyContractFirstService();
 var svc2 = new MyCodeFirstService();

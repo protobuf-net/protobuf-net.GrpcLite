@@ -1,4 +1,4 @@
-﻿#if NET472
+﻿#if NET462 || NET472
 namespace System.Runtime.CompilerServices
 {
     [AttributeUsage(AttributeTargets.Parameter, AllowMultiple = false, Inherited = false)]

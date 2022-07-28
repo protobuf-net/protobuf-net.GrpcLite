@@ -97,7 +97,7 @@ static class Program
                 // reasonable defaults
                 tests = Tests.NamedPipe | Tests.Local | Tests.Tcp | Tests.Unmanaged | Tests.TcpTls | Tests.TcpTlsClientCert | Tests.NamedPipeTls
                     | Tests.ManagedTls;
-#if NET472
+#if NET462 || NET472
                 tests |= Tests.TcpSAEA; // something glitching here on net6; probably fixable
 #else
                 tests |= Tests.Managed; // net472 doesn't like non-TLS gRPC, even with the feature-flag set
@@ -150,7 +150,7 @@ static class Program
             }
 
             GrpcChannelOptions grpcChannelOptions = new();
-#if NET472
+#if NET462 || NET472
             AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
             grpcChannelOptions.HttpHandler = new WinHttpHandler();
             //const bool ManagedClientStreaming = false;

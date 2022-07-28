@@ -42,7 +42,9 @@ internal sealed class FrameSequenceSegment : ReadOnlySequenceSegment<byte>
         }
 
         if (first is null) return default;
-
+#if !NET472 // avoid this optimization on netfx; due to the ROS bug, this might end up allocating a second ReadOnlySequenceSegment (if no array support)
+        if (ReferenceEquals(first, last)) return first.Memory.AsReadOnlySequence();
+#endif
         return new ReadOnlySequence<byte>(first, 0, last!, last!.Memory.Length);
     }
 
