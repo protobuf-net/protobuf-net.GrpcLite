@@ -4,6 +4,8 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.IO;
+using System.Net;
+using System.Net.Sockets;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -14,7 +16,7 @@ namespace ProtoBuf.Grpc.Lite.Internal
 {
     static partial class Utilities
     {
-#if NET472
+#if NET462 || NET472
         public static ValueTask<int> ReadAsync(this Stream stream, Memory<byte> buffer, CancellationToken cancellationToken)
         {
             static void Throw() => throw new NotSupportedException("Array-based buffer required");
@@ -93,53 +95,29 @@ namespace ProtoBuf.Grpc.Lite.Internal
                 return false;
             }
         }
+#endif
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal static ReadOnlySequence<T> AsReadOnlySequence<T>(this ReadOnlyMemory<T> memory)
-        {
-            // netfx has a nasty bug if you use `new ROS(memory)` with a custom manager with non-zero start; the bug
-            // doesn't apply to sequence segments, though - so if we have a custom manager that doesn't support arrays: use that
-            if (memory.IsEmpty) return default;
-            if (MemoryMarshal.TryGetArray(memory, out var segment))
-                return new ReadOnlySequence<T>(segment.Array, segment.Offset, segment.Count);
-            return ViaManager(memory);
-
-            static ReadOnlySequence<T> ViaManager(ReadOnlyMemory<T> memory)
-            {
-                if (MemoryMarshal.TryGetMemoryManager<T, MemoryManager<T>>(memory, out var manager, out var start, out var length)
-                    && start != 0)
-                {
-                    var seqSegment = manager is RefCountedMemoryManager<T> basic ? basic.SharedSegment : new IsolatedSequenceSegment<T>(manager.Memory);
-                    return new ReadOnlySequence<T>(seqSegment, start, seqSegment, start + length);
-                }
-                return new ReadOnlySequence<T>(memory);
-            }
-        }
-#else
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static ReadOnlySequence<T> AsReadOnlySequence<T>(this ReadOnlyMemory<T> memory) => new ReadOnlySequence<T>(memory);
-#endif
-    }
-}
-#if NET472
-namespace ProtoBuf.Grpc.Lite.Internal
-{
-    internal sealed class IsolatedSequenceSegment<T> : ReadOnlySequenceSegment<T>
-    {
-        public IsolatedSequenceSegment(ReadOnlyMemory<T> memory)
+
+#if NET462
+        internal static Task<Socket> AcceptAsync(this Socket socket)
         {
-            Next = null;
-            Memory = memory;
-            RunningIndex = 0;
+            return Task<Socket>.Factory.FromAsync(
+                (callback, state) => ((Socket)state).BeginAccept(callback, state),
+                asyncResult => ((Socket)asyncResult.AsyncState).EndAccept(asyncResult),
+                state: socket);
         }
-    }
-}
-namespace ProtoBuf.Grpc.Lite.Connections
-{
-    partial class RefCountedMemoryManager<T>
-    {
-        private ReadOnlySequenceSegment<T>? _singleSegment;
-        internal ReadOnlySequenceSegment<T> SharedSegment => _singleSegment ??= new IsolatedSequenceSegment<T>(Memory);
-    }
-}
+        public static Task ConnectAsync(this Socket socket, EndPoint remoteEndPoint)
+        {
+            return Task.Factory.FromAsync(
+                (targetEndPoint, callback, state) => ((Socket)state).BeginConnect(targetEndPoint, callback, state),
+                asyncResult => ((Socket)asyncResult.AsyncState).EndConnect(asyncResult),
+                remoteEndPoint,
+                state: socket);
+        }
 #endif
+
+     
+    }
+}

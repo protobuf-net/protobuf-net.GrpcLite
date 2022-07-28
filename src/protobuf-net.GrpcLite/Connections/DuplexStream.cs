@@ -64,7 +64,7 @@ public sealed class DuplexStream : Stream
     /// <inheritdoc/>
     public override string ToString() => $"{nameof(DuplexStream)}:{_read}/{_write}";
 
-#if !NET472
+#if !(NET462 || NET472)
     /// <inheritdoc/>
     public override ValueTask DisposeAsync()
     {
@@ -109,7 +109,7 @@ public sealed class DuplexStream : Stream
     /// <inheritdoc/>
     public override Task CopyToAsync(Stream destination, int bufferSize, CancellationToken cancellationToken) => _read.CopyToAsync(destination, bufferSize, cancellationToken);
 
-#if !NET472
+#if !(NET462 || NET472)
     /// <inheritdoc/>
     public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) => _read.ReadAsync(buffer, offset, count, cancellationToken);
     /// <inheritdoc/>
@@ -138,7 +138,7 @@ public sealed class DuplexStream : Stream
     public override void EndWrite(IAsyncResult asyncResult) => _write.EndWrite(asyncResult);
     /// <inheritdoc/>
     public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) => _write.WriteAsync(buffer, offset, count, cancellationToken);
-#if !NET472
+#if !(NET462 || NET472)
     /// <inheritdoc/>
     public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default) => _write.WriteAsync(buffer, cancellationToken);
     /// <inheritdoc/>

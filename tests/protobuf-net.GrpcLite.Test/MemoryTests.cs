@@ -67,7 +67,7 @@ public class MemoryTests
         Assert.Equal(mStart, segment.Offset);
         Assert.Equal(mLength, segment.Count);
 
-#if !NET472
+#if !(NET462 || NET472)
         Assert.True(MemoryMarshal.TryGetMemoryManager<byte, RefCountedMemoryManager<byte>>(ros.First, out var sMgr, out var sStart, out var sLength));
         Assert.Equal(length, sLength);
         Assert.Equal(mStart, sStart);

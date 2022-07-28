@@ -142,7 +142,7 @@ public sealed class LiteServer : IDisposable
         bool IEqualityComparer<ReadOnlyMemory<char>>.Equals(ReadOnlyMemory<char> x, ReadOnlyMemory<char> y)
             => x.Span.SequenceEqual(y.Span);
 
-#if NETSTANDARD2_1 || NET472
+#if NETSTANDARD2_1 || NET462 || NET472
         int IEqualityComparer<ReadOnlyMemory<char>>.GetHashCode(ReadOnlyMemory<char> obj)
         {
             // pretty random

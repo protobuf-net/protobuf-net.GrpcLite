@@ -39,7 +39,7 @@ internal sealed class SocketFrameConnection : IFrameConnection
 
     static void SetBuffer(SocketAwaitableEventArgs args, Memory<byte> value)
     {
-#if NET472
+#if NET462 || NET472
         if (!MemoryMarshal.TryGetArray<byte>(value, out var segment)) ThrowNeedArray();
         args.SetBuffer(segment.Array, segment.Offset, segment.Count);
         static void ThrowNeedArray() => throw new NotSupportedException("The underlying buffer array could not be retrieved");
